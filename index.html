@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>White Loop Bus Tracker – University Park</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f7fa;--card:#fff;--ink:#12202e;--muted:#4a5a6a;--route:#fff;--casing:#001e44;--accent:#1e407c;--ok:#0a7d3b;--line:#c9d3de;--map:#dfe6ee}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e141b;--card:#18212b;--ink:#f1f5f9;--muted:#a9b8c8;--route:#fff;--casing:#0b2a55;--accent:#96bee6;--ok:#5ee08a;--line:#34445a;--map:#14202f}}
+:root[data-theme="dark"]{--bg:#0e141b;--card:#18212b;--ink:#f1f5f9;--muted:#a9b8c8;--route:#fff;--casing:#0b2a55;--accent:#96bee6;--ok:#5ee08a;--line:#34445a;--map:#14202f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:calc(1rem*var(--fs,1))/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:1.6em;margin:0}
+.brand{background:#001e44;color:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;border-bottom:6px solid #96bee6}
+.brand p,.brand h1{color:#fff}.wl{display:inline-block;background:#fff;color:#001e44;font-weight:800;letter-spacing:.08em;padding:2px 10px;border-radius:999px;font-size:.85em}
+p{margin:4px 0;color:var(--muted)}
+.card{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:12px;margin:12px 0}
+svg{width:100%;height:auto;display:block;background:var(--map);border-radius:10px}
+.stop{cursor:pointer}
+.stop circle{fill:#fff;stroke:#001e44;stroke-width:5}
+.stop.sel circle{fill:var(--accent);stroke:var(--ink);stroke-width:5}
+.stop text{font:700 15px system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--map);stroke-width:4px}
+.stop:focus-visible circle{outline:3px solid var(--route)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button,select{font:inherit;font-weight:600;padding:10px 14px;border-radius:10px;border:2px solid var(--ink);background:var(--card);color:var(--ink);cursor:pointer;min-height:44px}
+button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+#status{font-size:1.4em;font-weight:700}
+.eta{font-size:2.2em;font-weight:800;color:var(--accent)}
+.steps{display:flex;gap:6px;margin-top:8px}
+.steps span{flex:1;text-align:center;padding:8px 2px;border:2px solid var(--line);border-radius:8px;font-weight:600;font-size:.85em}
+.steps span.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+#alert{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;font-weight:800}
+#alert.show{display:flex}
+#alert .big{font-size:calc(3rem*var(--fs,1));line-height:1.1}
+#alert .icon{font-size:6rem}
+#alert button{margin-top:24px;font-size:1.3em;padding:16px 32px}
+.lv-soon{background:#1e407c}.lv-near{background:#b45309;animation:fl 1s steps(1) infinite}.lv-now{background:#b91c1c;animation:fl .6s steps(1) infinite}
+@keyframes fl{50%{filter:brightness(1.5)}}
+@media (prefers-reduced-motion:reduce){#alert{animation:none!important}}
+</style>
+</head>
+<body>
+<main>
+<header class="brand"><div class="wl">WHITE LOOP</div><h1>Bus Tracker</h1><p>Penn State · University Park · CATA</p></header>
+<p>Tap your stop on the map. We'll alert you with a full-screen message, flashes and vibration — no sound needed.</p>
+
+<div class="card">
+<svg id="map" viewBox="0 0 600 380" role="group" aria-label="Simplified map of the White Loop bus route"></svg>
+</div>
+
+<div class="card" aria-live="polite">
+<div id="status">Choose your stop to begin.</div>
+<div class="eta" id="eta"></div>
+<div class="steps" id="steps" aria-hidden="true"><span>Tracking</span><span>1 min away</span><span>20 sec</span><span>Arriving</span></div>
+</div>
+
+<div class="card btns">
+<button id="speed" aria-pressed="false">⏩ Demo speed ×5</button>
+<button id="big" aria-pressed="false">🔠 Larger text</button>
+<button id="test">📳 Test alert</button>
+<button id="clear">✖ Clear stop</button>
+</div>
+<p>Simplified, not-to-scale schematic of the White Loop. The bus is simulated — for real arrival times use the CATA myStop or Penn State Go app. Vibration works on most phones; the screen alert works everywhere.</p>
+</main>
+
+<div id="alert" role="alertdialog" aria-live="assertive" aria-label="Bus alert">
+<div class="icon" id="aicon"></div><div class="big" id="atext"></div><p id="asub" style="color:#fff;font-size:1.4em"></p>
+<button id="adismiss">OK, got it</button>
+</div>
+
+<script>
+const stops=[{n:"Schlow Library",x:80,y:70},{n:"Beaver Hill Apts",x:250,y:50},{n:"Calder Commons",x:420,y:50},{n:"Bryce Jordan Center",x:540,y:140},{n:"Pegula Ice Arena",x:520,y:260},{n:"Rec Hall (Burrowes Rd)",x:370,y:320},{n:"Pattee Library",x:200,y:300},{n:"Atherton Hotel (S. Burrowes)",x:70,y:200}];
+const NS="http://www.w3.org/2000/svg",map=document.getElementById("map");
+const d=[];let L=0;
+stops.forEach((s,i)=>{d.push(L);const t=stops[(i+1)%stops.length];L+=Math.hypot(t.x-s.x,t.y-s.y)});
+function mk(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||map).appendChild(e);return e}
+map.insertAdjacentHTML("beforeend",'<g role="img" aria-label="Penn State" style="font-family:\'Pacifico\',\'Brush Script MT\',\'Segoe Script\',cursive;font-size:54px;fill:var(--ink);text-anchor:middle"><text x="300" y="132">Penn</text><text x="300" y="186">State</text></g>');
+const pts=stops.map(s=>s.x+","+s.y).join(" ");mk("polygon",{points:pts,fill:"none",stroke:"var(--casing)","stroke-width":16,"stroke-linejoin":"round"});mk("polygon",{points:pts,fill:"none",stroke:"var(--route)","stroke-width":9,"stroke-linejoin":"round"});
+let sel=null;
+const els=stops.map((s,i)=>{
+ const g=mk("g",{class:"stop",tabindex:0,role:"button","aria-label":"Select stop: "+s.n});
+ mk("circle",{cx:s.x,cy:s.y,r:15},g);
+ const side=s.y>=100&&(s.x<100||s.x>500);const ty=side?s.y+5:(s.y<100?s.y-24:s.y+38);
+ const t=mk("text",{x:side?(s.x<100?s.x+22:s.x-22):(s.x<100?s.x-14:s.x),y:ty,"text-anchor":side?(s.x<100?"start":"end"):(s.x<100?"start":"middle")},g);t.textContent=s.n;
+ g.onclick=()=>pick(i);g.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick(i)}};
+ return g});
+const bus=mk("g",{});mk("rect",{x:-18,y:-12,width:36,height:24,rx:6,fill:"#fff",stroke:"#001e44","stroke-width":3},bus);
+const bt=mk("text",{y:6,"text-anchor":"middle",style:"font:16px sans-serif"},bus);bt.textContent="🚌";
+
+function posAt(s){s=((s%L)+L)%L;let i=d.length-1;while(d[i]>s)i--;const a=stops[i],b=stops[(i+1)%stops.length],f=(s-d[i])/Math.hypot(b.x-a.x,b.y-a.y);return{x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f}}
+
+const BASE=12; // px per second of simulated bus
+let mult=1,S=0,last=performance.now(),level=0,prevDelta=null;
+const $=id=>document.getElementById(id);
+function pick(i){sel=i;level=0;prevDelta=null;els.forEach((e,j)=>e.classList.toggle("sel",j===i));
+ els[i].querySelector("circle").setAttribute("r",15);$("status").textContent="Tracking "+stops[i].n+"…"}
+
+function show(lv,title,sub,icon,vib){
+ const a=$("alert");a.className="show lv-"+lv;$("aicon").textContent=icon;$("atext").textContent=title;$("asub").textContent=sub;
+ try{navigator.vibrate&&navigator.vibrate(vib)}catch(e){}
+ $("adismiss").focus()}
+$("adismiss").onclick=()=>{$("alert").className="";try{navigator.vibrate&&navigator.vibrate(0)}catch(e){}};
+$("test").onclick=()=>show("now","Bus arriving!","This is a test alert","🚨",[400,150,400,150,400]);
+$("clear").onclick=()=>{sel=null;level=0;els.forEach(e=>e.classList.remove("sel"));$("status").textContent="Choose your stop to begin.";$("eta").textContent="";setSteps(-1)};
+$("speed").onclick=e=>{mult=mult===1?5:1;e.target.setAttribute("aria-pressed",mult===5)};
+$("big").onclick=e=>{const on=e.target.getAttribute("aria-pressed")!=="true";e.target.setAttribute("aria-pressed",on);document.documentElement.style.setProperty("--fs",on?1.35:1)};
+function setSteps(n){[...$("steps").children].forEach((c,i)=>c.classList.toggle("on",i<=n))}
+
+function tick(now){
+ const dt=Math.min((now-last)/1000,1);last=now;S=(S+BASE*mult*dt)%L;
+ const p=posAt(S);bus.setAttribute("transform","translate("+p.x+","+p.y+")");
+ if(sel!==null){
+  const delta=(d[sel]-S+L)%L,eta=delta/BASE;
+  if(prevDelta!==null&&delta>prevDelta+L/2){level=0} // bus passed; reset for next loop
+  prevDelta=delta;
+  const away=stops.filter((s,i)=>{const di=(d[i]-S+L)%L;return di>0&&di<delta}).length;
+  const sec=Math.ceil(eta/mult);
+  $("eta").textContent=eta<2?"Arriving now":(sec>=60?Math.floor(sec/60)+" min ":"")+(sec%60)+" sec";
+  $("status").textContent=stops[sel].n+": "+(away?away+" stop"+(away>1?"s":"")+" away":"next stop!");
+  const real=eta/mult;let lv=0;
+  if(eta<=2.5)lv=3;else if(real<=20||eta<=6)lv=2;else if(real<=60||eta<=14)lv=1;
+  setSteps(lv);
+  if(lv>level){level=lv;
+   if(lv===1)show("soon","Bus is about 1 minute away","Head to "+stops[sel].n,"🔔",[200,100,200]);
+   if(lv===2)show("near","Bus is almost here!","Get ready at "+stops[sel].n,"🚏",[300,100,300,100,300]);
+   if(lv===3)show("now","BUS ARRIVING NOW","Wave to the driver!","🚌",[600,150,600,150,600]);}
+ }
+ requestAnimationFrame(tick)}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
